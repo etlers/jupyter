@@ -1,0 +1,9 @@
+# 시뮬레이션
+simulation:
+    seed_money: 1000000
+    logic_gap: 60
+    first_price: 123456
+    list_gap:
+        - [100,40,20]
+        - [90,50,30]
+        - [80,30,15]
