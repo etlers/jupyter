@@ -7,6 +7,7 @@ import requests
 import lxml.html as lh
 from bs4 import BeautifulSoup as bs
 import pymysql
+import yaml
 import argparse
 # from sqlalchemy import create_engine
 from datetime import datetime, timedelta
@@ -18,12 +19,18 @@ from datetime import datetime, timedelta
 # conn = engine.connect()
 
 # current date and time
-now_dtm = datetime.now()
-now_dt = now_dtm.strftime("%Y.%m.%d")
-pre_dtm = now_dtm - timedelta(days=1)
-pre_dt = pre_dtm.strftime("%Y.%m.%d")
+# now_dtm = datetime.now()
+# now_dt = now_dtm.strftime("%Y.%m.%d")
+# pre_dtm = now_dtm - timedelta(days=1)
+# pre_dt = pre_dtm.strftime("%Y.%m.%d")
 
-list_dt = []
+with open('./config/jongmok.yaml') as stream:
+    try:
+        dict_dt = yaml.safe_load(stream)
+        now_dt = dict_dt['NOW_DT']
+        pre_dt = dict_dt['PRE_DT']
+    except yaml.YAMLError as exc:
+        print(exc)
 
 jongmok_day_sum = []
 # 디비로 저장하기 위한 컬러명
@@ -87,14 +94,12 @@ def save_data():
 
 
 def execute(jongmok_cd, jongmok_nm):
-    now_dt = list_dt[0]
-    pre_dt = list_dt[1]
     dict_forgn_poss = {}
     dict_company_value = {}
     list_day_value = []
 
-    def get_company_buy_sell(jongmok):
-        base_url = f"https://finance.naver.com/item/frgn.nhn?code={jongmok}&page=1&trader_day=1"
+    def get_company_buy_sell():
+        base_url = f"https://finance.naver.com/item/frgn.nhn?code={jongmok_cd}&page=1&trader_day=1"
         response = requests.get( base_url, headers={"User-agent": "Mozilla/5.0"} )
         soup = bs(response.text, 'html.parser')
         list_company = str(soup.findAll("table", {"summary": "거래원정보에 관한표이며 일자별 누적 정보를 제공합니다."})).split('\n')
@@ -135,8 +140,8 @@ def execute(jongmok_cd, jongmok_nm):
                     list_amount = []        
 
 
-    def get_up_down_percent(jongmok):
-        base_url = f"https://finance.naver.com/item/sise.nhn?code={jongmok}"
+    def get_up_down_percent():
+        base_url = f"https://finance.naver.com/item/sise.nhn?code={jongmok_cd}"
         response = requests.get( base_url, headers={"User-agent": "Mozilla/5.0"} )
         soup = bs(response.text, 'html.parser')
         list_sum = str(soup.findAll("table", {"summary": "주요시세 정보에 관한표 입니다."})).split('\n')
@@ -169,7 +174,7 @@ def execute(jongmok_cd, jongmok_nm):
                 dict_forgn_poss[idx] = 0
 
 
-    def get_sise_day(jongmok_cd):
+    def get_sise_day():
         base_url = f"https://finance.naver.com/item/sise_day.nhn?code={jongmok_cd}"
         response = requests.get( base_url, headers={"User-agent": "Mozilla/5.0"} )
         soup = bs(response.text, 'html.parser')
@@ -178,6 +183,7 @@ def execute(jongmok_cd, jongmok_nm):
         for row in list_day:
             if (now_dt in row):
                 print_tf = True
+                row = now_dt
             elif (pre_dt in row):
                 print_tf = False
             if print_tf:
@@ -196,9 +202,9 @@ def execute(jongmok_cd, jongmok_nm):
                     list_day_value.append(row.split(" ")[0])
 
 
-    get_up_down_percent(jongmok_cd)
-    get_sise_day(jongmok_cd)
-    get_company_buy_sell(jongmok_cd)
+    get_up_down_percent()
+    get_sise_day()
+    get_company_buy_sell()
 
     list_jongmok = []
     list_jongmok.append(jongmok_cd)
@@ -244,19 +250,10 @@ def execute(jongmok_cd, jongmok_nm):
             else:
                 list_temp.append(list_jongmok[idx])
         jongmok_day_sum.append(list_temp)
+    print(jongmok_day_sum)
     
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--now_dt', type=str, default=None)
-    parser.add_argument('--pre_dt', type=str, default=None)
-    args = parser.parse_args()
-    list_dt.append(args.now_dt)
-    list_dt.append(args.pre_dt)
-
-    if len(args.now_dt) != 10:
-        print("No Now Date")
-
     df_jongmok = pd.read_csv("./csv/jongmok_list.csv", encoding="CP949")
 
     try:
