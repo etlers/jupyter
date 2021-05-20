@@ -4,6 +4,7 @@
 import pymysql
 import pandas as pd
 import datetime, os, time
+from pymysql.connections import DEFAULT_CHARSET
 import requests
 import threading
 
@@ -17,9 +18,9 @@ class slack_message(threading.Thread):
         self.message_string = message_string
 
     def run(self):
-        url = "https://hooks.slack.com/services/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" 
+        url = "https://hooks.slack.com/services/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" 
         payload = { "text" : self.message_string } 
-        requests.post(url, json=payload)
+        print(requests.post(url, json=payload))
 
 
 def get_qry_data_list(qry):
@@ -112,14 +113,14 @@ def get_jongmok_day_sum(from_dt, to_dt):
     return df_day_sum
 
 # 지속적인 매수 주
-def continue_buying():
+def continue_buying(df_base):
 
-    def find_target(df_base, cd):
+    def find_target(df_continue):
         read_cnt = 0
         pre_day_forgn = 0
         pre_buy_company = 0
         
-        df_target = df_base.sort_values("deal_dt", axis=0, ascending=False).head(3)
+        df_target = df_continue.sort_values("deal_dt", axis=0, ascending=False).head(3)
         df_target = df_target.sort_values("deal_dt", axis=0)
         # 3일연속 기관 매수량이 늘고 외국인 보유가 늘어났다면
         for idx, row in df_target.iterrows():
@@ -138,22 +139,71 @@ def continue_buying():
         return True
 
 
-    df_jongmok_sum = get_jongmok_sum()
-    df_jongmok_cd = df_jongmok_sum[["jongmok_cd"]].drop_duplicates()
+    df_jongmok_cd = df_base[["jongmok_cd"]].drop_duplicates()
 
-    jongmok_cnt = 0
-
+    list_continue = []
     for idx, row in df_jongmok_cd.iterrows():
-        df_filtered = df_jongmok_sum.loc[df_jongmok_sum.jongmok_cd == row["jongmok_cd"]]        
-        if find_target(df_filtered, row["jongmok_cd"]):
-            jongmok_cnt += 1
-            df_filtered = df_filtered.sort_values("deal_dt", axis=0, ascending=False).head(1)
-            if jongmok_cnt == 1:
-                df_result = df_filtered
-            else:
-                df_result = pd.concat([df_result, df_filtered])
-
+        list_temp = []
+        df_filtered = df_base.loc[df_base.jongmok_cd == row["jongmok_cd"]]        
+        if find_target(df_filtered):
+            list_temp.append(row["jongmok_nm"])
+        list_continue.append(list_temp)
+    
+    df_result = pd.DataFrame(list_continue, columns=["jongmok_nm"])
+    print(df_result)
     return df_result
+
+
+# 당일 투자자별 매수현황
+def day_investor_info(now_dt):
+    list_day_invest_cols = [
+        "개인",
+        "외인",
+        "기관",
+        "금융투자",
+        "보험",
+        "투신(사모)",
+        "은행",
+        "기타금융기관",
+        "기금",
+        "기타법인",
+    ]
+    result_message = ""
+
+    qry = f"""
+        SELECT PRIVATE
+             , FORGN
+             , COMPANY
+             , FINN_INVEST
+             , INSURANCE
+             , PRI_FUND
+             , BANK
+             , ETC_FINN
+             , KIGEUM
+             , ETC_COMP
+             , CASE WHEN DIV_CD = '01' THEN '코스피' ELSE '코스닥' END AS DIV_NM
+          FROM day_invest
+         WHERE DEAL_DT = '{now_dt}'
+         ORDER BY DIV_CD
+    """
+    list_day_investor = get_qry_data_list(qry)
+    
+    list_idx = [1, 2, 8]    
+    for list_row in list_day_investor:
+        msg = ""
+        buy_sum = 0
+        for idx in list_idx:
+            # 외국인 기관, 연기금만
+            msg += list_day_invest_cols[idx] + " " + format(list_row[idx], ",") + " | "
+            buy_sum += list_row[idx]
+        # 거래소 구분
+        if buy_sum > 0:
+            div_msg = "매수 " + format(buy_sum, ",")
+        else:
+            div_msg = "매도 " + format(buy_sum, ",")
+        result_message += list_row[10] + "] " + msg + div_msg + "\n"
+    
+    return result_message
 
 # 급등 주 추출
 def sudden_rising(df_base, check_dt):
@@ -213,11 +263,11 @@ def execute():
     df_sudden = df_base.loc[df_base.deal_dt.astype(str) >= pre_dt]
     df_sudden = sudden_rising(df_sudden, to_dt.replace(".","-"))
     # 지속적인 매수 증가. 최근 5일
-    # df_continue = df_base
-
+    df_continue = df_base.loc[df_base.deal_dt.astype(str) >= from_dt]
+    df_continue = continue_buying(df_continue)
+    
     """
-    # 지속적인 매수 증가
-    df_continue = continue_buying()
+    
     df_continue = df_continue.fillna(0)
     # 급등하는 종목
     df_sudden = sudden_rising()
@@ -258,17 +308,20 @@ def execute():
     df_found.to_csv("./csv/found_jongmok_" + run_dt.replace("-", "") + ".csv", encoding="utf-8-sig", index=False)
     """
     # 최종 결과 슬랙으로 전송하기 위한 문자열 생성
-    result_message = ""
+    result_message = "종목명 | 급등률 | 종가 | 거래량 | 외인보유"
     for idx, row in df_sudden.iterrows():
         result_message += row.jongmok_nm + ". " + format(row.급등률, ",") + "% | " + format(row.종가, ",") + " | " + format(row.거래량, ",") + " | " + format(row.외국인비율, ",") + "%" + "\n"
     
-    return result_message
+    # 당일 투자자별 매수현황
+    result_investor = day_investor_info(to_dt)
+
+    return result_investor + "\n" + result_message
     
 
 if __name__ == "__main__":
     result_message = execute()
-    # print(result_message)
+    print(result_message)
     # 생성한 문자 슬랙으로 전송
-    if len(result_message) > 0:
-        t = slack_message(result_message)
-        t.start()
+    # if len(result_message) > 0:
+    #     t = slack_message(result_message)
+    #     t.start()

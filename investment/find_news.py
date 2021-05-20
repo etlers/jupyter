@@ -47,25 +47,23 @@ def save_data(jongmok_cd, jongmok_nm, list_jongmok_news):
 
 def execute(jongmok_cd, jongmok_nm):
     dict_jongmok_news = {}
-    for idx in range(1):
-        base_url = f"https://finance.naver.com/item/news_news.nhn?code={jongmok_cd}&page=&sm=title_entity_id.basic&clusterId="
-        driver.get(base_url)
-        # driver.switch_to.frame('news')
-        response = driver.page_source
-        list_news = response.split('\n')        
-        list_jongmok_news = []
-        list_temp = []                
-        for row in list_news:
-            if ('<a href="/item/news_read.nhn?article_id' in row or '<td class="date">' in row):
-                try:
-                    list_temp.append(row.split('"_top">')[1].replace("</a>", "").replace('<span class="ico_reply"></span>', "").replace("'", "''"))
-                    list_jongmok_news.append(list_temp)
-                except:
-                    list_temp.append(row.replace("\t","").replace('<td class="date">',"").replace("</td>","").strip().split(" ")[0])
-                    list_jongmok_news.append(list_temp)
-                    list_temp = []
-    dict_jongmok_news[jongmok_cd] = list_jongmok_news
-    driver.close()
+    base_url = f"https://finance.naver.com/item/news_news.nhn?code={jongmok_cd}&page=&sm=title_entity_id.basic&clusterId="
+    driver.get(base_url)
+    # driver.switch_to.frame('news')
+    response = driver.page_source
+    list_news = response.split('\n')        
+    list_jongmok_news = []
+    list_temp = []                
+    for row in list_news:
+        if ('<a href="/item/news_read.nhn?article_id' in row or '<td class="date">' in row):
+            try:
+                list_temp.append(row.split('"_top">')[1].replace("</a>", "").replace('<span class="ico_reply"></span>', "").replace("'", "''"))
+                list_jongmok_news.append(list_temp)
+            except:
+                list_temp.append(row.replace("\t","").replace('<td class="date">',"").replace("</td>","").strip().split(" ")[0])
+                list_jongmok_news.append(list_temp)
+                list_temp = []
+    dict_jongmok_news[jongmok_cd] = list_jongmok_news    
     save_data(jongmok_cd, jongmok_nm, list_jongmok_news)
 
 
@@ -81,3 +79,4 @@ if __name__ == "__main__":
     for index, row in df_jongmok.iterrows():
         print(row["JONGMOK_CD"], row["JONGMOK_NM"])
         execute(row["JONGMOK_CD"], row["JONGMOK_NM"])
+    driver.close()
