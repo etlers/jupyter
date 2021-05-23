@@ -3,7 +3,6 @@
 """
 import requests
 from bs4 import BeautifulSoup as bs
-import yaml
 
 def execute(jongmok_cd):
     base_url = f"https://finance.naver.com/item/sise_day.nhn?code={jongmok_cd}"

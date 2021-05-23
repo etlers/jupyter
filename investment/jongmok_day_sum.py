@@ -250,7 +250,6 @@ def execute(jongmok_cd, jongmok_nm):
             else:
                 list_temp.append(list_jongmok[idx])
         jongmok_day_sum.append(list_temp)
-    print(jongmok_day_sum)
     
 
 if __name__ == "__main__":
@@ -267,9 +266,7 @@ if __name__ == "__main__":
     for index, row in df_jongmok.iterrows():
         print(row["JONGMOK_CD"], row["JONGMOK_NM"])
         execute(row["JONGMOK_CD"], row["JONGMOK_NM"])
-    # execute("200580", "nonmae")
     # execute("035720", "kakao")
-    # execute("138040", "nonmae")
     # 추출한 데이터가 존재하면 디비에 저장
     if len(jongmok_day_sum) > 0:
         save_data()
