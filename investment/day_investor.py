@@ -108,7 +108,6 @@ def execute(sosok_cd):
                     ETC_COMP = {list_row[10]},
                     DAY_SUM = {day_sum}
             """
-            print(qry)
             curs.execute(qry)
         conn.commit()
 

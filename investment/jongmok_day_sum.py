@@ -84,13 +84,21 @@ def save_data():
         values 
             %s
         """ % (whole_string[:len(whole_string)-2].replace("<td", now_dt))
+    
+    curs.execute(qry)
+    conn.commit()
+
+    # 증감률에 따른 증감액 음수 적용
+    qry = f"""
+        UPDATE jongmok_day_sum
+           SET gap = gap * -1
+         WHERE preday_rt < 0
+           AND DEAL_DT = '{now_dt}'
+        """
 
     f = open("./qry/ins_qry.sql", 'w', encoding="utf-8-sig")
     f.write(qry)
     f.close()
-    
-    curs.execute(qry)
-    conn.commit()
 
 
 def execute(jongmok_cd, jongmok_nm):

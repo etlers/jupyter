@@ -7,21 +7,12 @@ import datetime, os, time
 from pymysql.connections import DEFAULT_CHARSET
 import requests
 import threading
+import yaml
+import send_slack_message as ssm
 
 # current date and time
 now_dtm = datetime.datetime.now()
 run_dt = now_dtm.strftime("%Y-%m-%d")
-
-class slack_message(threading.Thread):
-    def __init__(self, message_string):
-        super().__init__()
-        self.message_string = message_string
-
-    def run(self):
-        url = "https://hooks.slack.com/services/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" 
-        payload = { "text" : self.message_string } 
-        print(requests.post(url, json=payload))
-
 
 def get_qry_data_list(qry):
     # MySQL Connection 연결
@@ -42,6 +33,26 @@ def get_qry_data_list(qry):
     conn.close()
     
     return fetched_list
+
+# 5일 범위 일자 가져오기
+def get_min_max_dt():
+    sql = """
+        SELECT DATE_FORMAT(deal_dt, '%Y.%m.%d')
+             , rank() over(ORDER BY deal_dt DESC) AS rnk
+          FROM (SELECT distinct deal_dt
+                  FROM jongmok_day_sum
+                 ORDER BY deal_dt desc
+                 LIMIT 5) T1
+    """
+    # 1: To, 5: From, 2: Pre
+    list_dt_rank = get_qry_data_list(sql)
+
+    return list_dt_rank
+
+list_dt_rank = get_min_max_dt()
+from_dt = list_dt_rank[len(list_dt_rank)-1][0]
+to_dt = list_dt_rank[0][0]
+pre_dt = list_dt_rank[1][0]
 
 list_day_sum_cols = [
     "deal_dt", 
@@ -70,22 +81,60 @@ list_cols_day = [
 ]
 
 
-# 5일 범위 일자 가져오기
-def get_min_max_dt():
-    # SQL문 실행
-    sql = """
-        SELECT DATE_FORMAT(deal_dt, '%Y.%m.%d')
-             , rank() over(ORDER BY deal_dt DESC) AS rnk
-          FROM (SELECT distinct deal_dt
-                  FROM jongmok_day_sum
-                 ORDER BY deal_dt desc
-                 LIMIT 5) T1
+def make_rising_df():
+    sql = f"""
+SELECT jongmok_nm, end_price, avg_rt, gap, com_deal, forgn_deal, round(deal_rt, 0) as deal_rt
+  FROM (SELECT jongmok_nm
+             , t2.end_price AS end_price
+             , round(AVG(preday_rt), 2) AS avg_rt
+             , SUM(gap) AS gap
+             , SUM(com_deal) AS com_deal
+             , SUM(forgn_deal) AS forgn_deal
+             , case when t3.deal_amount = 0 then 0 else round((t2.deal_amount - t3.deal_amount) / t3.deal_amount, 2) * 100 end AS deal_rt
+          FROM jongmok_day_sum t1
+          left outer join (SELECT jongmok_cd, end_price, deal_amount
+                             FROM jongmok_day_sum 
+                            WHERE deal_dt = '{to_dt}') t2
+            on t1.jongmok_cd = t2.jongmok_cd
+          left outer join (SELECT jongmok_cd, deal_amount
+                             FROM jongmok_day_sum 
+                            WHERE deal_dt = '{pre_dt}') t3
+            on t1.jongmok_cd = t3.jongmok_cd
+         WHERE deal_dt BETWEEN '{from_dt}' AND '{to_dt}'
+         GROUP BY jongmok_nm) TT
+ WHERE deal_rt between 100 AND 500
+   AND avg_rt > 1.5
+   AND com_deal > 50000
+   AND forgn_deal > 0
+ ORDER BY deal_rt desc
     """
-    # 1: To, 5: From, 2: Pre
-    list_dt_rank = get_qry_data_list(sql)
-
-    return list_dt_rank
-
+    list_rising = get_qry_data_list(sql)
+    list_rising_cols = [
+        "종목",
+        "종가",
+        "증감율",
+        "전일증가액",
+        "기관",
+        "전일거래증가율",        
+    ]
+    
+    msg = f"{to_dt} - 최근 5거래일 기관 순매수 & 평균 증감율 1.5% 이상\n"
+    msg += "#" * 40 + "\n"
+    for col in list_rising_cols:
+        msg += col + " | "
+    msg = msg[:len(msg)-2]
+    msg += "\n"
+    msg += "#" * 40 + "\n"
+    for list_row in list_rising:
+        for row in list_row:
+            if type(row) != str:
+                msg += format(row, ",") + " | "
+            else:
+                msg += row + " | "
+        msg = msg[:len(msg)-2]
+        msg += "\n"
+    ssm.send_message_to_slack(msg)
+    #print(msg)
 
 def get_jongmok_day_sum(from_dt, to_dt):
     # SQL문 실행
@@ -202,8 +251,9 @@ def day_investor_info(now_dt):
         else:
             div_msg = "매도 " + format(buy_sum, ",")
         result_message += list_row[10] + "] " + msg + div_msg + "\n"
+    result_message = result_message.rstrip("\n")
     
-    return result_message
+    return result_message + "\n" + "#" * 40
 
 # 급등 주 추출
 def sudden_rising(df_base, check_dt):
@@ -225,7 +275,10 @@ def sudden_rising(df_base, check_dt):
         calc_rt = 0.0
         for idx, row in df_base.iterrows():
             if deal_amount > 0:
-                calc_rt = ((deal_amount - row["deal_amount"]) / row["deal_amount"]) * 100
+                try:
+                    calc_rt = ((deal_amount - row["deal_amount"]) / row["deal_amount"]) * 100
+                except:
+                    calc_rt = 0.0
                 if calc_rt > 300.0:
                     list_temp = []
                     list_temp.append(row["jongmok_nm"])
@@ -253,13 +306,10 @@ def sudden_rising(df_base, check_dt):
     return df_result
 
 def execute():
-    list_dt_rank = get_min_max_dt()
-    from_dt = list_dt_rank[len(list_dt_rank)-1][0]
-    to_dt = list_dt_rank[0][0]
-    pre_dt = list_dt_rank[1][0]
+    
     df_base = get_jongmok_day_sum(from_dt, to_dt)
     # 급등 종목. 전일 대비 10% 이상, 거래량 300% 이상, 종가 1만원 이상
-    pre_dt = pre_dt.replace(".","-")
+    #pre_dt = pre_dt.replace(".","-")
     df_sudden = df_base.loc[df_base.deal_dt.astype(str) >= pre_dt]
     df_sudden = sudden_rising(df_sudden, to_dt.replace(".","-"))
     # 지속적인 매수 증가. 최근 5일
@@ -308,7 +358,8 @@ def execute():
     df_found.to_csv("./csv/found_jongmok_" + run_dt.replace("-", "") + ".csv", encoding="utf-8-sig", index=False)
     """
     # 최종 결과 슬랙으로 전송하기 위한 문자열 생성
-    result_message = "종목명 | 급등률 | 종가 | 거래량 | 외인보유"
+    result_message = "종목명 | 급등률 | 종가 | 거래량 | 외인보유" + "\n"
+    result_message += "#" * 40 + "\n"
     for idx, row in df_sudden.iterrows():
         result_message += row.jongmok_nm + ". " + format(row.급등률, ",") + "% | " + format(row.종가, ",") + " | " + format(row.거래량, ",") + " | " + format(row.외국인비율, ",") + "%" + "\n"
     
@@ -319,9 +370,10 @@ def execute():
     
 
 if __name__ == "__main__":
+    make_rising_df()
     result_message = execute()
     print(result_message)
     # 생성한 문자 슬랙으로 전송
-    # if len(result_message) > 0:
-    #     t = slack_message(result_message)
-    #     t.start()
+    if len(result_message) > 0:
+        # 최종 슬랙으로 뉴스 헤드라인 던지기
+        ssm.send_message_to_slack(result_message)
