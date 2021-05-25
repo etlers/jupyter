@@ -20,7 +20,8 @@ def execute(jongmok_cd):
             if idx == 1:
                 file_yaml.write("NOW_DT: " + row + "\n")
             elif idx == 2:
-                file_yaml.write("PRE_DT: " + row)
+                file_yaml.write("PRE_DT: " + row + "\n")
+    file_yaml.write("WEBHOOK_URL: https://hooks.slack.com/services/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")
     file_yaml.close()
 
 if __name__ == "__main__":

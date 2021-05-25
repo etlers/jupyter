@@ -136,9 +136,9 @@ SELECT jongmok_nm, end_price, avg_rt, gap, com_deal, forgn_deal, round(deal_rt, 
     ssm.send_message_to_slack(msg)
     #print(msg)
 
-def get_jongmok_day_sum(from_dt, to_dt):
+def get_jongmok_day_sum():
     # SQL문 실행
-    sql = """
+    sql = f"""
         SELECT deal_dt
              , jongmok_cd
              , jongmok_nm
@@ -153,9 +153,9 @@ def get_jongmok_day_sum(from_dt, to_dt):
              , com_deal
              , forgn_deal
           FROM jongmok_day_sum
-         WHERE deal_dt BETWEEN '%s' AND '%s'
+         WHERE deal_dt BETWEEN '{from_dt}' AND '{to_dt}'
          ORDER BY jongmok_cd, deal_dt desc
-    """ % (from_dt, to_dt)
+    """
     list_day_sum = get_qry_data_list(sql)    
     df_day_sum = pd.DataFrame(list_day_sum, columns=list_day_sum_cols)    
     
@@ -199,7 +199,7 @@ def continue_buying(df_base):
         list_continue.append(list_temp)
     
     df_result = pd.DataFrame(list_continue, columns=["jongmok_nm"])
-    print(df_result)
+
     return df_result
 
 
@@ -307,17 +307,15 @@ def sudden_rising(df_base, check_dt):
 
 def execute():
     
-    df_base = get_jongmok_day_sum(from_dt, to_dt)
+    df_base = get_jongmok_day_sum()
     # 급등 종목. 전일 대비 10% 이상, 거래량 300% 이상, 종가 1만원 이상
-    #pre_dt = pre_dt.replace(".","-")
-    df_sudden = df_base.loc[df_base.deal_dt.astype(str) >= pre_dt]
+    df_sudden = df_base[df_base["deal_dt"].astype(str) >= pre_dt.replace(".","-")]
     df_sudden = sudden_rising(df_sudden, to_dt.replace(".","-"))
     # 지속적인 매수 증가. 최근 5일
-    df_continue = df_base.loc[df_base.deal_dt.astype(str) >= from_dt]
-    df_continue = continue_buying(df_continue)
+    # df_continue = df_base.loc[df_base.deal_dt.astype(str) >= from_dt]
+    # df_continue = continue_buying(df_continue)
     
-    """
-    
+    """    
     df_continue = df_continue.fillna(0)
     # 급등하는 종목
     df_sudden = sudden_rising()
