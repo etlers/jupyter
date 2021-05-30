@@ -1,4 +1,4 @@
-import slack
+import send_slack_message as ssm
 
 """
 client = slack.WebClient(token="https://hooks.slack.com/services/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")
@@ -23,5 +23,4 @@ def send_message_to_slack(text):
 send_message_to_slack("Send Message Using Python")    
 """
 
-if "b" in ["a", "b"]:
-    print(True)
+ssm.send_message_to_slack("test")
