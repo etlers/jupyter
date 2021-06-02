@@ -83,7 +83,13 @@ list_cols_day = [
 
 def make_rising_df():
     sql = f"""
-SELECT jongmok_nm, end_price, avg_rt, gap, com_deal, forgn_deal, round(deal_rt, 0) as deal_rt
+SELECT jongmok_nm
+     , end_price
+     , concat(avg_rt, '%') as avg_rt
+     , gap
+     , com_deal
+     , forgn_deal
+     , concat(cast(round(deal_rt, 0) as char), '%') as deal_rt
   FROM (SELECT jongmok_nm
              , t2.end_price AS end_price
              , round(AVG(preday_rt), 2) AS avg_rt
@@ -103,6 +109,7 @@ SELECT jongmok_nm, end_price, avg_rt, gap, com_deal, forgn_deal, round(deal_rt, 
          WHERE deal_dt BETWEEN '{from_dt}' AND '{to_dt}'
          GROUP BY jongmok_nm) TT
  WHERE deal_rt between 100 AND 500
+   AND end_price > 9999
    AND avg_rt > 1.5
    AND com_deal > 50000
    AND forgn_deal > 0
@@ -115,6 +122,7 @@ SELECT jongmok_nm, end_price, avg_rt, gap, com_deal, forgn_deal, round(deal_rt, 
         "증감율",
         "전일증가액",
         "기관",
+        "외국인",
         "전일거래증가율",        
     ]
     
@@ -134,7 +142,7 @@ SELECT jongmok_nm, end_price, avg_rt, gap, com_deal, forgn_deal, round(deal_rt, 
         msg = msg[:len(msg)-2]
         msg += "\n"
     ssm.send_message_to_slack(msg)
-    #print(msg)
+    print(msg)
 
 def get_jongmok_day_sum():
     # SQL문 실행

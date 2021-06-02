@@ -11,6 +11,6 @@ with open('./config/jongmok.yaml') as stream:
 def send_message_to_slack(msg):
     msg = msg.replace('"', "'").replace("/","")
     url = webhook_url
-    pyload = { "text" : msg } 
-    response = requests.post(url, json=pyload)
+    payload = { "text" : msg } 
+    response = requests.post(url, json=payload)
     print(response)
