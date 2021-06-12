@@ -1,0 +1,11 @@
+url_param:
+  kospi_url: "https://finance.naver.com/sise/sise_quant_high.nhn?sosok=0"
+  kosdak_url: "https://finance.naver.com/sise/sise_quant_high.nhn?sosok=1"
+
+query_param:
+  from_rt: 1
+  to_rt: 10
+  from_price: 5000
+  to_price: 20000
+
+base_amount: 1000000

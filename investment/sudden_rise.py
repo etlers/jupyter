@@ -3,12 +3,10 @@
 """
 import pymysql
 import pandas as pd
-import datetime, os, time
+import datetime, time
 from pymysql.connections import DEFAULT_CHARSET
-import requests
-import threading
-import yaml
 import send_slack_message as ssm
+
 
 # current date and time
 now_dtm = datetime.datetime.now()
@@ -116,6 +114,10 @@ SELECT jongmok_nm
  ORDER BY deal_rt desc
     """
     list_rising = get_qry_data_list(sql)
+    # 없으면 그냥 종료
+    if len(list_rising) == 0:
+        return 0
+    # 컬럼
     list_rising_cols = [
         "종목",
         "종가",
@@ -126,23 +128,24 @@ SELECT jongmok_nm
         "전일거래증가율",        
     ]
     
-    msg = f"{to_dt} - 최근 5거래일 기관 순매수 & 평균 증감율 1.5% 이상\n"
-    msg += "#" * 40 + "\n"
+    rising_msg = f"{to_dt} - 최근 5거래일 기관 순매수 & 평균 증감율 1.5% 이상\n"
+    rising_msg += "#" * 40 + "\n"
     for col in list_rising_cols:
-        msg += col + " | "
-    msg = msg[:len(msg)-2]
-    msg += "\n"
-    msg += "#" * 40 + "\n"
+        rising_msg += col + " | "
+    rising_msg = rising_msg[:len(rising_msg)-2]
+    rising_msg += "\n"
+    rising_msg += "#" * 40 + "\n"
     for list_row in list_rising:
         for row in list_row:
             if type(row) != str:
-                msg += format(row, ",") + " | "
+                rising_msg += format(row, ",") + " | "
             else:
-                msg += row + " | "
-        msg = msg[:len(msg)-2]
-        msg += "\n"
-    ssm.send_message_to_slack(msg)
-    print(msg)
+                rising_msg += row + " | "
+        rising_msg = rising_msg[:len(rising_msg)-2]
+        rising_msg += "\n"
+    # ssm.send_message_to_slack(msg)
+    print(rising_msg)
+    return rising_msg
 
 def get_jongmok_day_sum():
     # SQL문 실행
@@ -287,7 +290,7 @@ def sudden_rising(df_base, check_dt):
                     calc_rt = ((deal_amount - row["deal_amount"]) / row["deal_amount"]) * 100
                 except:
                     calc_rt = 0.0
-                if calc_rt > 300.0:
+                if (calc_rt > 300.0 and row["forgn_poss_rt"] > 5.0):
                     list_temp = []
                     list_temp.append(row["jongmok_nm"])
                     list_temp.append(round(calc_rt, 2))
@@ -313,7 +316,7 @@ def sudden_rising(df_base, check_dt):
     
     return df_result
 
-def execute():
+def make_sudden_df():
     
     df_base = get_jongmok_day_sum()
     # 급등 종목. 전일 대비 10% 이상, 거래량 300% 이상, 종가 1만원 이상
@@ -363,6 +366,9 @@ def execute():
     df_found = pd.DataFrame(list_found, columns=list_found_cols)
     df_found.to_csv("./csv/found_jongmok_" + run_dt.replace("-", "") + ".csv", encoding="utf-8-sig", index=False)
     """
+    # 없으면 그냥 종료
+    if len(df_sudden) == 0:
+        return ""
     # 최종 결과 슬랙으로 전송하기 위한 문자열 생성
     result_message = "종목명 | 급등률 | 종가 | 거래량 | 외인보유" + "\n"
     result_message += "#" * 40 + "\n"
@@ -371,15 +377,19 @@ def execute():
     
     # 당일 투자자별 매수현황
     result_investor = day_investor_info(to_dt)
+    sudden_msg = result_investor + "\n" + result_message
+    print(sudden_msg)
 
-    return result_investor + "\n" + result_message
-    
+    return sudden_msg
+
 
 if __name__ == "__main__":
-    make_rising_df()
-    result_message = execute()
-    print(result_message)
+    # 지속적인 상승
+    rising_msg = make_rising_df()
+    # 급등
+    sudden_msg = make_sudden_df()
+    
     # 생성한 문자 슬랙으로 전송
-    if len(result_message) > 0:
+    if len(sudden_msg) > 0:        
         # 최종 슬랙으로 뉴스 헤드라인 던지기
-        ssm.send_message_to_slack(result_message)
+        ssm.send_message_to_slack(rising_msg + sudden_msg)

@@ -85,6 +85,10 @@ def save_data():
             %s
         """ % (whole_string[:len(whole_string)-2].replace("<td", now_dt))
     
+    f = open("./qry/ins_qry.sql", 'w', encoding="utf-8-sig")
+    f.write(qry)
+    f.close()
+
     curs.execute(qry)
     conn.commit()
 
@@ -94,11 +98,7 @@ def save_data():
            SET gap = gap * -1
          WHERE preday_rt < 0
            AND DEAL_DT = '{now_dt}'
-        """
-
-    f = open("./qry/ins_qry.sql", 'w', encoding="utf-8-sig")
-    f.write(qry)
-    f.close()
+        """    
 
 
 def execute(jongmok_cd, jongmok_nm):
@@ -243,8 +243,12 @@ def execute(jongmok_cd, jongmok_nm):
     list_jongmok.append(company_amount)
     list_jongmok.append(forgn_amount)
 
+    # 컬럼이 맞으면 최종 리스트에 추가하고 다음 거 처리
     if len(jongmok_day_sum_cols) == len(list_jongmok):
         jongmok_day_sum.append(list_jongmok)
+    # 12개 보다 작다는 것은 데이터가 거의 구성이 안되어 있다는 의미로 지나감
+    elif len(list_jongmok) < 12:
+        pass
     else:
         print(list_jongmok)
         # 등락이 없어 맞질 않음. 일자를 넣고 맞춰줌
