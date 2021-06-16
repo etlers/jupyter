@@ -149,10 +149,10 @@ def get_save_data():
     if len(list_result) == 0:
         return False
     # 데이터프레임 생성
-    list_cols = ["RANK","UP_RT","JONGMOK_NM","NOW_PRICE","PRE_VS_RT","UP_DN_RT","BUY_PRICE","SELL_PRICE","NOW_AMOUNT","PRE_AMOUNT","PER"]
+    list_cols = ["RANK","UP_RT","JONGMOK_NM","NOW_PRICE","PRE_VS_RT","UP_DN_RT","BUY_PRICE","SELL_PRICE","NOW_AMOUNT","END_AMOUNT","PER"]
     df_quant = pd.DataFrame(list_result, columns=list_cols)    
     df_quant["DEAL_DTM"] = DU.get_now_datetime_string()
-    df_quant = df_quant[["DEAL_DTM","JONGMOK_NM","UP_RT","NOW_AMOUNT","PRE_AMOUNT","NOW_PRICE","BUY_PRICE","SELL_PRICE","PRE_VS_RT","UP_DN_RT"]]
+    df_quant = df_quant[["DEAL_DTM","JONGMOK_NM","UP_RT","NOW_AMOUNT","END_AMOUNT","NOW_PRICE","BUY_PRICE","SELL_PRICE","PRE_VS_RT","UP_DN_RT"]]
     df_quant["UP_DN_RT"] = df_quant["UP_DN_RT"].str.replace("%","").astype(float)
     df_quant["UP_RT"] = df_quant["UP_RT"].astype(int)
     # 데이터프레임 디비로 저장
@@ -227,15 +227,16 @@ def process_func():
 
 # 실행
 def execute():    
-    process_func()
-    return 1
+    # process_func()
+    # return 1
 
-    # 최초 시작전 이전 데이터는 모두 지움
+    # 최초 시작전 이전 데이터는 모두 지움. 당일 데이터로만 함
     qry = """
         truncate table quant_high
     """
     DB.transaction_data(qry)
 
+    idx = 0
     # 시간 동안 수행
     while True:
         # 종료상태면 빠져나감
@@ -244,38 +245,43 @@ def execute():
         # 일시 추출
         now_dtm = DU.get_now_datetime_string()
         now_tm = now_dtm.split(" ")[1].replace(":","")
-        # 10시까지만 수행
-        if now_tm > "100000":
-            print("Finish!!")
-            break
         # 최초 30초 쌓인 후의 데이터부터 시작
-        if now_tm < "090030":
+        if now_tm < "090010":
             print("Waiting:", now_dtm)
             time.sleep(1)
             continue
+        # 10시까지만 수행
+        elif now_tm > "093000":
+            print("Finish!!")
+            break
+        
         # 데이터 크롤링 그리고 디비로 적재
         if get_save_data():
-            # 종목 추출
-            if process_func():
-                # 15분 이상 남았으면 다시 시작
-                if now_tm < "094500":
-                    continue
-                # 아니면 마감
-                else:
-                    dict_status["status"] = 9
+            pass
+            # # 종목 추출
+            # if process_func():
+            #     # 15분 이상 남았으면 다시 시작
+            #     if now_tm < "094500":
+            #         continue
+            #     # 아니면 마감
+            #     else:
+            #         dict_status["status"] = 9
+        idx += 1
         # 9시 30분 전에는 5초단위
         if now_tm < "093000":
-            time.sleep(5)
+            print(idx, "Save & Waiting...")
+            time.sleep(10)
         # 이후는 15초 단위
         else:
+            print(idx, "Save & Waiting...")
             time.sleep(15)
 
     # 매도까지 됐는지 확인
-    while True:
-        # 매도까지 됐다면 종료
-        if check_sell_stock():
-            break
-        time.sleep(1)
+    # while True:
+    #     # 매도까지 됐다면 종료
+    #     if check_sell_stock():
+    #         break
+    #     time.sleep(1)
     
 
 if __name__ == "__main__":
