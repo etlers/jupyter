@@ -1,9 +1,10 @@
-import pandas as pd
 import requests
+import time, datetime
 from bs4 import BeautifulSoup as bs
 
 url_index = "https://kr.investing.com/currencies/us-dollar-index"
 url_currency = "https://kr.investing.com/currencies/usd-krw"
+
 
 def get_soup(url):
     response = requests.get( url, headers={"User-agent": "Mozilla/5.0"} )
@@ -59,40 +60,60 @@ def make_usd_krw():
     
     return dict_usd_krw
 
-# Make Dictionary Data
-dict_usd_idx = make_usd_index()
-dict_usd_krw = make_usd_krw()
 
-# USD Index 52w Average
-year_avg_idx = (float(dict_usd_idx[10][1].split(" - ")[0].replace(",","")) + float(dict_usd_idx[10][1].split(" - ")[1].replace(",",""))) / 2
-# Now Index
-cur_idx = float(dict_usd_idx[4][1].replace(",",""))
-# USD KRW 52w Average
-year_avg_cur = (float(dict_usd_krw[8][1].split(" - ")[0].replace(",","")) + float(dict_usd_krw[8][1].split(" - ")[1].replace(",",""))) / 2
-# Now Currency
-now_cur = float(dict_usd_krw[2][0].replace(",",""))
-# Dollar Gap Rate
-usd_gap_rate = cur_idx / now_cur * 100
-# Dollar Gap Rate - 52w
-year_avg_usd_gap_rate = year_avg_idx / year_avg_cur * 100
-# Proper USD KRW
-proper_cur = round(cur_idx / year_avg_usd_gap_rate * 100, 2)
+def execute():
+    # Make Dictionary Data
+    dict_usd_idx = make_usd_index()
+    dict_usd_krw = make_usd_krw()
+    # USD Index 52w Average
+    year_avg_idx = (float(dict_usd_idx[10][1].split(" - ")[0].replace(",","")) + float(dict_usd_idx[10][1].split(" - ")[1].replace(",",""))) / 2
+    # Now Index
+    cur_idx = float(dict_usd_idx[4][1].replace(",",""))
+    # USD KRW 52w Average
+    year_avg_cur = (float(dict_usd_krw[8][1].split(" - ")[0].replace(",","")) + float(dict_usd_krw[8][1].split(" - ")[1].replace(",",""))) / 2
+    # Now Currency
+    now_cur = float(dict_usd_krw[2][0].replace(",",""))
+    # Dollar Gap Rate
+    usd_gap_rate = cur_idx / now_cur * 100
+    # Dollar Gap Rate - 52w
+    year_avg_usd_gap_rate = year_avg_idx / year_avg_cur * 100
+    # Proper USD KRW
+    proper_cur = round(cur_idx / year_avg_usd_gap_rate * 100, 2)
 
-line_len = 75
-print("#" * line_len)
-print("# Dollar index")
-print("#" * line_len)
-for key, val in dict_usd_idx.items():
-    print(key, val)
+    line_len = 75
+    print("#" * line_len)
+    print("# Dollar index")
+    print("#" * line_len)
+    for key, val in dict_usd_idx.items():
+        print(key, val)
 
-print("#" * line_len)
-print("# USD - KRW Currency")
-print("#" * line_len)
-for key, val in dict_usd_krw.items():
-    print(key, val)
+    print("#" * line_len)
+    print("# USD - KRW Currency")
+    print("#" * line_len)
+    for key, val in dict_usd_krw.items():
+        print(key, val)
 
-print("#" * line_len)
-now_rate = round((now_cur / proper_cur) * 100, 2)
-result = f"{proper_cur} - [{now_cur}, {now_rate}%]"
-print(result)
-print("#" * line_len)
+    print("#" * line_len)
+    now_rate = round((now_cur / proper_cur) * 100, 2)
+    result = f"{proper_cur} - [{now_cur}, {now_rate}%]"
+    print(result)
+    print("#" * line_len)
+
+
+if __name__ == "__main__":
+    while True:
+        now_dtm = datetime.datetime.now()
+        run_dt = now_dtm.strftime("%Y-%m-%d %H:%M:%S")
+        run_hh = now_dtm.strftime("%H")
+        
+        if run_hh < "09":
+            print("Waiting...")
+            time.sleep(1)
+            continue
+        elif run_hh > "17":
+            print("Deal End.")
+            break
+
+        print(run_dt)
+        execute()
+        time.sleep(10)
