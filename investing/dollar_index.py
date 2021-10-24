@@ -1,6 +1,12 @@
 import requests
+import sys
 import time, datetime
 from bs4 import BeautifulSoup as bs
+
+sys.path.append("C:/Users/etlers/Documents/project/python/common")
+
+import send_slack_message as SSM
+import common_util as CU
 
 url_index = "https://kr.investing.com/currencies/us-dollar-index"
 url_currency = "https://kr.investing.com/currencies/usd-krw"
@@ -61,7 +67,7 @@ def make_usd_krw():
     return dict_usd_krw
 
 
-def execute():
+def execute(run_dtm):
     # Make Dictionary Data
     dict_usd_idx = make_usd_index()
     dict_usd_krw = make_usd_krw()
@@ -99,21 +105,30 @@ def execute():
     print(result)
     print("#" * line_len)
 
+    slack_msg = run_dtm + "\n" + result + "\n"
+    SSM.send_message_to_slack(slack_msg)
+
 
 if __name__ == "__main__":
+    # now_dtm = datetime.datetime.now()
+    # run_dtm = now_dtm.strftime("%Y-%m-%d %H:%M:%S")
+    # execute(run_dtm)
+    # CU.waiting_seconds(10, "Waiting... Next Calculation")
+
     while True:
         now_dtm = datetime.datetime.now()
-        run_dt = now_dtm.strftime("%Y-%m-%d %H:%M:%S")
+        run_dtm = now_dtm.strftime("%Y-%m-%d %H:%M:%S")
         run_hh = now_dtm.strftime("%H")
         
         if run_hh < "09":
-            print("Waiting...")
+            print("Waiting... Starting Hour")
             time.sleep(1)
             continue
         elif run_hh > "17":
-            print("Deal End.")
+            print("End Calculation for Dealing.")
             break
 
-        print(run_dt)
-        execute()
-        time.sleep(10)
+        execute(run_dtm)
+        # every 30 minutes
+        CU.waiting_seconds(1800, "Waiting... Next Calculation for Dealing")
+        time.sleep(1800)
