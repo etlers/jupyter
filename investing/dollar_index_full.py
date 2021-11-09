@@ -10,9 +10,7 @@ import common_util as CU
 
 url_index = "https://kr.investing.com/currencies/us-dollar-index"
 url_currency = "https://kr.investing.com/currencies/usd-krw"
-url_kodex = "https://finance.naver.com/"
 
-line_len = 55
 
 def get_soup(url):
     response = requests.get( url, headers={"User-agent": "Mozilla/5.0"} )
@@ -25,9 +23,6 @@ def make_usd_index():
     soup = get_soup(url_index)
 
     historical_usd_idx = soup.find("div",{"class":"clear overviewDataTable overviewDataTableWithTooltip"})
-
-    if historical_usd_idx is None: return -1
-
     idx = 0
     dict_usd_idx = {}
     for row in historical_usd_idx:
@@ -45,9 +40,6 @@ def make_usd_krw():
     soup = get_soup(url_currency)
 
     list_usd_krw = soup.find("div",{"class":"main-current-data"})
-
-    if list_usd_krw is None: return -1
-
     idx = 0
     dict_usd_krw = {}
     for row in list_usd_krw:
@@ -75,41 +67,10 @@ def make_usd_krw():
     return dict_usd_krw
 
 
-def make_kodex_index():
-    soup = get_soup(url_kodex)
-
-    kodex_idx = soup.find("div",{"class":"dsc_area dsc_area2"})
-
-    if kodex_idx is None: return -1
-
-    idx = 0
-    dict_kodex_idx = {
-        "개인": 0,
-        "외국인": 0,
-        "기관": 0,
-    }
-
-    for row in str(kodex_idx).split("\n"):
-        row_string = str(row).strip().replace(",","").replace("+","")
-        if len(row_string) == 0: continue
-        idx += 1
-        if idx == 7:
-            dict_kodex_idx["개인"] = int(row_string)
-        elif idx == 14:
-            dict_kodex_idx["외국인"] = int(row_string)
-        elif idx == 21:
-            dict_kodex_idx["기관"] = int(row_string)
-
-    return dict_kodex_idx
-
-
 def execute(run_dtm):
     # Make Dictionary Data
     dict_usd_idx = make_usd_index()
     dict_usd_krw = make_usd_krw()
-
-    if dict_usd_idx == -1 or dict_usd_krw == -1: return 1
-
     # USD Index 52w Average
     year_avg_idx = (float(dict_usd_idx[10][1].split(" - ")[0].replace(",","")) + float(dict_usd_idx[10][1].split(" - ")[1].replace(",",""))) / 2
     # Now Index
@@ -124,49 +85,50 @@ def execute(run_dtm):
     year_avg_usd_gap_rate = year_avg_idx / year_avg_cur * 100
     # Proper USD KRW
     proper_cur = round(cur_idx / year_avg_usd_gap_rate * 100, 2)
-    # Kodex
-    total_amount = 0
-    buy_amount = 0
-    forgn_gap = 0
-    forgn_rt = 0.0
-    if run_dtm.split(" ")[1].replace(":","") > "153000" or run_dtm.split(" ")[1].replace(":","") < "090000":
-        pass
-    else:
-        dict_kodex_idx = make_kodex_index()        
-        for row in dict_kodex_idx.values():
-            total_amount += row
-            if row > 0:
-                buy_amount += row
-        try:
-            forgn_rt = round((dict_kodex_idx["외국인"] / buy_amount) * 100, 2)
-        except:
-            forgn_rt = 0.0
-        forgn_gap = dict_kodex_idx["외국인"] - dict_kodex_idx["개인"]
-        forgn_gap = dict_kodex_idx["외국인"] if dict_kodex_idx["외국인"] < 0 else forgn_gap
-    # Result
-    now_rate = round((now_cur / proper_cur) * 100, 2)
-    now_cur = '{:.2f}'.format(round(now_cur, 2))
-    now_rate = '{:.2f}'.format(round(now_rate, 2))
-    forgn_rt = '{:.2f}'.format(round(forgn_rt, 2))
-    result = f" {proper_cur} - [{now_cur}, {now_rate}%] [{forgn_rt}%, {forgn_gap}, {buy_amount}, {total_amount}]"
-    print(result)    
 
+    line_len = 75
+    print("#" * line_len)
+    print("# Dollar index")
+    print("#" * line_len)
+    for key, val in dict_usd_idx.items():
+        print(key, val)
+
+    print("#" * line_len)
+    print("# USD - KRW Currency")
+    print("#" * line_len)
+    for key, val in dict_usd_krw.items():
+        print(key, val)
+
+    print("#" * line_len)
+    now_rate = round((now_cur / proper_cur) * 100, 2)
+    result = f"{proper_cur} - [{now_cur}, {now_rate}%]"
+    print(result)
+    print("#" * line_len)
+
+    slack_msg = run_dtm + "\n" + result + "\n"
+    SSM.send_message_to_slack(slack_msg)
 
 
 if __name__ == "__main__":
-    
-    print("#" * line_len)
+    # now_dtm = datetime.datetime.now()
+    # run_dtm = now_dtm.strftime("%Y-%m-%d %H:%M:%S")
+    # execute(run_dtm)
+    # CU.waiting_seconds(10, "Waiting... Next Calculation")
 
     while True:
         now_dtm = datetime.datetime.now()
         run_dtm = now_dtm.strftime("%Y-%m-%d %H:%M:%S")
         run_hh = now_dtm.strftime("%H")
         
-        # if run_hh > "17":
-        #     print("End Calculation for Dealing.")
-        #     break
+        if run_hh < "09":
+            print("Waiting... Starting Hour")
+            time.sleep(1)
+            continue
+        elif run_hh > "17":
+            print("End Calculation for Dealing.")
+            break
 
         execute(run_dtm)
-        time.sleep(5)
-
-    print("#" * line_len)
+        # every 30 minutes
+        CU.waiting_seconds(1800, "Waiting... Next Calculation for Dealing")
+        time.sleep(1800)
