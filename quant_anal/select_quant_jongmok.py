@@ -46,29 +46,16 @@ def trader_flow_data(cd, pg=1):
     }
     res = requests.get(url=url, headers=headers)      
     df_frgn = pd.read_html(res.text, header=[1])[2].dropna()
-    
+
     df_frgn.rename(columns={"순매매량": "순매매량_기관", "순매매량.1": "순매매량_외국인"}, inplace=True)
     try:
         df_frgn["등락률"] = df_frgn["등락률"].apply(lambda X: float(X.replace("%","").replace("+","")))
         df_frgn["보유율"] = df_frgn["보유율"].apply(lambda X: float(X.replace("%","")))
+        list_end_prc = list(df_frgn.sort_values(by=["날짜"])["종가"])
+        list_frgn_rt = list(df_frgn.sort_values(by=["날짜"])["보유율"])
+        return list_end_prc, list_frgn_rt
     except:
-        pass
-    df_frgn["CD"] = cd
-
-    return df_frgn
-
-
-def day_sise_flow_data(cd, pg=1):
-    url = f"https://finance.naver.com/item/sise_day.naver?code={cd}&page={pg}"
-    headers = {
-        "referer" : url,    
-        "user-agent" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36" 
-    }
-    res = requests.get(url=url, headers=headers)
-    df_sise = pd.read_html(res.text)[0].dropna().set_index("날짜").reset_index()
-    df_sise["CD"] = cd
-    
-    return df_sise
+        return [], []
 
 
 def get_bs_data(cd):
@@ -164,84 +151,64 @@ def bs_data_to_dict(cd, nm):
         pass
 
 
-def select_target_forgn(list_target_cd):
-    # Company & Foreign Possesion. 외국인 지분율이 상승 중인지 확인을 위함
-    list_df = []
-    for cd in list_target_cd:
-        list_df.append(trader_flow_data(cd, pg=1))
-        
-    df_trader_flow = pd.concat(list_df)
-
-    list_forgn = []
-    for cd in list_target_cd:
-        now_rt = df_trader_flow[df_trader_flow["CD"] == cd].iloc[0]["보유율"]
-        first_rt = df_trader_flow[df_trader_flow["CD"] == cd].iloc[-1]["보유율"]
-        updn_val = round(now_rt - first_rt, 2)
-        if updn_val > 0.0:
-            list_forgn.append(cd)
-
-    return list_forgn
-
-
-def select_target_sise(list_target_cd):
-    # 일별 시세. 올라올 조짐이 있는지 확인을 위함
-    list_df = []
-    for cd in list_target_cd:
-        list_df.append(day_sise_flow_data(cd, pg=1))
-        
-    df_day_sise_flow = pd.concat(list_df)
-
-    list_end_prc = []
-    for cd in list_target_cd:
-        now_rt = df_day_sise_flow[df_day_sise_flow["CD"] == cd].iloc[0]["종가"]
-        first_rt = df_day_sise_flow[df_day_sise_flow["CD"] == cd].iloc[-1]["종가"]
-        updn_val = round(now_rt - first_rt, 2)
-        if updn_val > 0.0:
-            list_end_prc.append(cd)
-
-    return list_end_prc
-
-
 def execute():
+    list_target_columns = [
+        '코드', '종목명', '거래량', 
+        '종가', '52주신고가', '52주신저가', '사분위75%', '사분위50%', '사분위25%', '신고가대비_종가비율', '신저가대비_종가비율', '사분위75%대비_종가비율', '사분위50%대비_종가비율', '사분위25%대비_종가비율',
+        '종가_중간값', '20일중간값_종가비율', '20일사분위25%', '20일사분위25%_종가비율', '종가흐름', 
+        '외국인지분율', '외국인지분율조건', '외국인지분율_중간값', '20일중간값_외국인비율', '외국인보유흐름', 
+        'ROE조건', 'ROE(지배주주)_년도', 'ROE(지배주주)_분기', 
+        '영업이익_증가', '당기순이익_증가',
+        'PER_중간값', 'PER(배)_년도', 'PER(배)_분기', 
+        'PBR_중간값', 'PBR(배)_년도', 'PBR(배)_분기',
+        '매출액_년도', '매출액_분기', '영업이익_년도', '영업이익_분기', '당기순이익_년도', '당기순이익_분기', '영업이익률_년도', '영업이익률_분기', '순이익률_년도', '순이익률_분기',
+        '주당배당금(원)_년도', '주당배당금(원)_분기', '시가배당률(%)_년도', '시가배당률(%)_분기', '배당성향(%)_년도', '배당성향(%)_분기', 
+        '부채비율_년도', '부채비율_분기', '당좌비율_년도', '당좌비율_분기', '유보율_년도', '유보율_분기', 'EPS(원)_년도', 'EPS(원)_분기', 'BPS(원)_년도', 'BPS(원)_분기', 
+    ]
     # Balace Sheet
     df_stock_list = pd.read_csv("stock_list.csv", encoding="utf-8-sig")
     for row in df_stock_list.values:
         bs_data_to_dict(row[1], row[3])
         
     df_result = pd.DataFrame.from_dict(dict_bs, orient='index')
-    df_result["TARGET_TF_ROE"] = df_result["ROE(지배주주)_년도"].apply(
+    df_result["ROE조건"] = df_result["ROE(지배주주)_년도"].apply(
         lambda X: np.where(np.mean(X) > 15.0, "T", "F")
     )
-    df_result["TARGET_TF_FRGN"] = df_result["외국인지분율"].apply(
+    df_result["외국인지분율조건"] = df_result["외국인지분율"].apply(
         lambda X: np.where(float(X) > 5.0, "T", "F")
     )
-    df_result["HIGH_VS_RT"] = round(df_result["종가"] / df_result["52주신고가"] * 100, 2)
-    df_result["LOW_VS_RT"] = round(df_result["종가"] / df_result["52주신저가"] * 100, 2)
-    df_result["75_VS_RT"] = round(df_result["종가"] / df_result["사분위75%"] * 100, 2)
-    df_result["50_VS_RT"] = round(df_result["종가"] / df_result["사분위50%"] * 100, 2)
-    df_result["25_VS_RT"] = round(df_result["종가"] / df_result["사분위25%"] * 100, 2)
-    df_result["PER_MEDIAN"] = df_result["PER(배)_년도"].apply(lambda X: np.median(X))
-    df_result["PBR_MEDIAN"] = df_result["PBR(배)_년도"].apply(lambda X: np.median(X))
+    df_result["신고가대비_종가비율"] = round(df_result["종가"] / df_result["52주신고가"] * 100, 2)
+    df_result["신저가대비_종가비율"] = round(df_result["종가"] / df_result["52주신저가"] * 100, 2)
+    df_result["사분위75%대비_종가비율"] = round(df_result["종가"] / df_result["사분위75%"] * 100, 2)
+    df_result["사분위50%대비_종가비율"] = round(df_result["종가"] / df_result["사분위50%"] * 100, 2)
+    df_result["사분위50%대비_종가비율"] = round(df_result["종가"] / df_result["사분위25%"] * 100, 2)
+    df_result["PER_중간값"] = df_result["PER(배)_년도"].apply(lambda X: np.median(X))
+    df_result["PBR_중간값"] = df_result["PBR(배)_년도"].apply(lambda X: np.median(X))
 
     # ROE 평균 15% 이상이면서 외국인 지분율이 5% 이상이고 사분위수 25%의 85% 아래인 종가 5천원 초과 종목
     df_target = df_result[
         (df_result["종가"] > 5000) & 
-        (df_result["TARGET_TF_ROE"] == "T") & 
-        (df_result["TARGET_TF_FRGN"] == "T")
+        (df_result["ROE조건"] == "T") & 
+        (df_result["외국인지분율조건"] == "T")
     ]
     # 영업이익_분기, 당기순이익_분기 두 값이 계속 증가를 했는지 여부
     df_target["영업이익_증가"] = df_target["영업이익_분기"].apply(lambda X: check_value_increasing(str(X)))
-    df_target["당기순이익_증가"] = df_target["당기순이익_분기"].apply(lambda X: check_value_increasing(str(X)))
+    df_target["당기순이익_증가"] = df_target["당기순이익_분기"].apply(lambda X: check_value_increasing(str(X)))    
+    # Foreigner and closing prices in the last 20 days
+    dict_flow = {}
+    for cd in df_target["코드"]:
+        list_end_prc, list_frgn_rt = trader_flow_data(cd.replace("A", ""))
+        dict_flow[cd] = [list_end_prc, list_frgn_rt]
 
-    list_target_cd = df_target.sort_values(by=["외국인지분율"], ascending=False)["코드"].unique()
+    df_target["종가흐름"] = df_target["코드"].apply(lambda X: dict_flow[X][0])
+    df_target["외국인보유흐름"] = df_target["코드"].apply(lambda X: dict_flow[X][1])
+    df_target["종가_중간값"] = df_target["종가흐름"].apply(lambda X: int(np.mean(eval(str(X)))))
+    df_target["20일중간값_종가비율"] = round(df_target["종가"] / df_target["종가_중간값"] * 100, 2)
+    df_target["20일사분위25%"] = df_target["종가흐름"].apply(lambda X: int(pd.Series(eval(str(X))).quantile(.25)))
+    df_target["20일사분위25%_종가비율"] = round(df_target["종가"] / df_target["20일사분위25%"] * 100, 2)
+    df_target["외국인지분율_중간값"] = df_target["외국인보유흐름"].apply(lambda X: round(np.mean(eval(str(X))), 2))
+    df_target["20일중간값_외국인비율"] = round(df_target["외국인지분율"] / df_target["외국인지분율_중간값"] * 100, 2)
 
-    list_forgn = select_target_forgn(list_target_cd)
-    list_end_prc = select_target_sise(list_target_cd)
+    df_target[list_target_columns].to_csv("bs_target.csv", encoding="utf-8-sig", index=False)
 
-    dict_result = {}
-    dict_result["target_df"] = df_target
-    dict_result["list_forgn"] = list_forgn
-    dict_result["list_end_prc"] = list_end_prc
-    
-
-    return dict_result
+    return df_target[list_target_columns]
